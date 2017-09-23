@@ -29,7 +29,7 @@ void find_requested_channel_cb(uint8_t *buf, uint16_t len)
     if (len == 128) {
         // beacon broadcast - grab the bssid if the ssid matches
         struct sniffer_buf2 *sniffer = (struct sniffer_buf2*) buf;
-        struct beaconinfo beacon = parse_beacon(sniffer->buf, 112, sniffer->rx_ctrl.rssi);
+        struct beaconinfo beacon = parse_beacon(sniffer->buf, 112);
         if( !memcmp(requested_ssid, beacon.ssid, sizeof(requested_ssid)) ) {
             Serial.printf("Found ssid %s on channel %d\r\n", beacon.ssid, beacon.channel);
             memcpy( found_bssid, beacon.bssid, ETH_MAC_LEN );
@@ -50,16 +50,16 @@ void get_client_rssi_cb(uint8_t *buf, uint16_t len)
     struct sniffer_buf *sniffer = (struct sniffer_buf*) buf;
     // NOTE: Doesn't seem to handle stuff when we have really quick networking from eg laptops
 
-    //Is data packet
+    // Is data packet (wireshark filter is wlan.fc.type_subtype & 0x0020 because wifi spec writes the packet bits in the opposite order)
     if ((sniffer->buf[0] & 0x08) == 0x08) {
-      struct clientinfo ci = parse_data(sniffer->buf, 36, sniffer->rx_ctrl.rssi, sniffer->rx_ctrl.channel);
+      struct clientinfo ci = parse_data(sniffer->buf);
 
-      // if it is not the station broadcasting and it is the ssid that we were tracking
-      if ( memcmp(ci.bssid, ci.station, ETH_MAC_LEN) && !memcmp( ci.bssid, found_bssid, ETH_MAC_LEN ) ) {
+      // if it is not the transmitter broadcasting and it is the ssid that we were tracking
+      if ( ci.bssid != ci.transmitter && !memcmp( ci.bssid, found_bssid, ETH_MAC_LEN ) ) {
             int found = -1;
 
             for( int i = 0; i < cache_entry_size; i++ ) {
-                if( !memcmp(ci.station, cache_entries[i].mac, ETH_MAC_LEN ) ) {
+                if( !memcmp(ci.transmitter, cache_entries[i].mac, ETH_MAC_LEN ) ) {
                     found = i;
                     break;
                 }
@@ -69,7 +69,7 @@ void get_client_rssi_cb(uint8_t *buf, uint16_t len)
                 if( found >= MAX_ENTRIES )  // prevent overflow
                     return;
 
-                memcpy( cache_entries[found].mac, ci.station, ETH_MAC_LEN );
+                memcpy( cache_entries[found].mac, ci.transmitter, ETH_MAC_LEN );
                 cache_entries[found].rssi_total = 0;
                 cache_entries[found].total = 0;
             }
